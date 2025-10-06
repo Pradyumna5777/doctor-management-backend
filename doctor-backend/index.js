@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import dotenv from "dotenv";
 import cors from "cors";
 import { fileURLToPath } from "url";
-import { dirname, resolve } from "path";
+import { dirname, resolve, join } from "path";
 
 import authRoutes from "./routes/authRoutes.js";
 import doctorRoutes from "./routes/doctorRoutes.js";
@@ -24,15 +24,31 @@ dotenv.config({ path: resolve(__dirname, envFile) });
 const app = express();
 
 // middleware
-app.use(cors({
-  origin: 'http://localhost:5173' // Vite dev server URL
-}));
+app.use(
+  cors({
+    origin: [
+      "http://localhost:5173", // local dev
+      "https://madhuri-nidan-kendra.vercel.app", // Vercel frontend
+    ],
+    credentials: true,
+  })
+);
 app.use(express.json());
 
 // log current environment
 console.log(`Running in ${process.env.NODE_ENV} mode`);
 
-// routes
+// Serve frontend from backend if exists (optional)
+if (process.env.NODE_ENV === "production") {
+  const frontendPath = join(__dirname, "public"); // place frontend build here
+  app.use(express.static(frontendPath));
+
+  app.get("*", (req, res) => {
+    res.sendFile(join(frontendPath, "index.html"));
+  });
+}
+
+// API routes
 app.use("/api/auth", authRoutes);
 app.use("/api/doctors", doctorRoutes);
 app.use("/api/appointments", appointmentRoutes);
@@ -43,10 +59,7 @@ app.use("/api/users", userRoutes);
 // connect DB + start server
 const PORT = process.env.PORT || 5000;
 mongoose
-  .connect(process.env.MONGO_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
+  .connect(process.env.MONGO_URI)
   .then(() => {
     console.log("MongoDB connected");
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
