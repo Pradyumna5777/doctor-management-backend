@@ -38,6 +38,9 @@ app.use(express.json());
 
 // log current environment
 console.log(`Running in ${process.env.NODE_ENV} mode`);
+console.log("client secret",process.env.GOOGLE_CLIENT_SECRET)
+console.log("client id",process.env.GOOGLE_CLIENT_ID)
+console.log("client jwt secret",process.env.JWT_SECRET)
 
 // Serve frontend from backend if exists (optional)
 if (process.env.NODE_ENV === "production") {
