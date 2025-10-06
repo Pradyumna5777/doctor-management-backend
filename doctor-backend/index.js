@@ -40,13 +40,16 @@ console.log(`Running in ${process.env.NODE_ENV} mode`);
 
 // Serve frontend from backend if exists (optional)
 if (process.env.NODE_ENV === "production") {
-  const frontendPath = join(__dirname, "public"); // place frontend build here
+  const frontendPath = join(__dirname, "public");
   app.use(express.static(frontendPath));
 
-  app.get("/*", (req, res) => {
+  // Serve index.html for all non-API routes
+  app.get(/^\/(?!api).*/, (req, res) => {
     res.sendFile(join(frontendPath, "index.html"));
   });
 }
+
+
 
 // API routes
 app.use("/api/auth", authRoutes);
