@@ -43,7 +43,7 @@ if (process.env.NODE_ENV === "production") {
   const frontendPath = join(__dirname, "public"); // place frontend build here
   app.use(express.static(frontendPath));
 
-  app.get("*", (req, res) => {
+  app.get("/*", (req, res) => {
     res.sendFile(join(frontendPath, "index.html"));
   });
 }
