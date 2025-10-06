@@ -29,6 +29,7 @@ app.use(
     origin: [
       "http://localhost:5173", // local dev
       "https://madhuri-nidan-kendra.vercel.app", // Vercel frontend
+        "https://www.madhuri-nidan-kendra.vercel.app", // if www is used
     ],
     credentials: true,
   })
