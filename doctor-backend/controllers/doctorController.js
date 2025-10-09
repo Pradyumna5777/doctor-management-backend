@@ -21,7 +21,7 @@ export const addDoctor = async (req, res) => {
   try {
     console.log("Request body:", req.body);
     console.log("Request file:", req.file);
-    const { name, email, password, specialty } = req.body;
+    const { name, email, phone, password, specialty } = req.body; // ✅ add phone
 
     // Prevent duplicates
     const existing = await Doctor.findOne({ email });
@@ -42,6 +42,7 @@ export const addDoctor = async (req, res) => {
     const doctor = new Doctor({
       name,
       email,
+      phone, // ✅ add phone
       password: hashed,
       role: "doctor",
       specialty,
@@ -64,9 +65,9 @@ export const addDoctor = async (req, res) => {
 export const updateDoctor = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, email, password, role, specialty } = req.body;
+    const { name, email, phone, password, role, specialty } = req.body;
 
-    const updateData = { name, email, role, specialty };
+    const updateData = { name, email, phone, role, specialty };
 
     // Hash password if provided
     if (password && password.trim() !== "") {
