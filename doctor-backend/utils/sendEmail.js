@@ -18,12 +18,13 @@ export const sendEmail = async (to, subject, html, bccAdmin = true) => {
       return;
     }
 
-    const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 465,
-      secure: true,
-      auth: { user, pass },
-    });
+  const transporter = nodemailer.createTransport({
+  host: "smtp.gmail.com",
+  port: 587,
+  secure: false, // STARTTLS
+  auth: { user, pass },
+});
+
 
     console.log("🚀 Transporter created. Verifying connection...");
 
