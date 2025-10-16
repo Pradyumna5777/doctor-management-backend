@@ -3,6 +3,7 @@ import Appointment from "../models/Appointment.js";
 import Doctor from "../models/Doctor.js";
 import User from "../models/User.js";
 import bcrypt from "bcrypt";
+import { sendEmail } from "../utils/sendEmail.js";
 
 // controllers/appointmentController.js
 export const getAppointments = async (req, res) => {
@@ -46,50 +47,87 @@ export const getAppointments = async (req, res) => {
 // controllers/appointmentController.js
 export const createAppointment = async (req, res) => {
   try {
-    const { name, email, phone, date, doctorId } = req.body;
-    
-    // Check if doctor exists
+    const { name, email, phone, date, doctorId, notes } = req.body;
+
+    // --- Check doctor ---
     const doctor = await Doctor.findById(doctorId);
-    if (!doctor) {
-      return res.status(404).json({ error: "Doctor not found" });
-    }
-    
-    let patient;
-    
-    // FIRST, try to find existing patient by email (important!)
-    patient = await User.findOne({ email, role: "patient" });
-    
+    if (!doctor) return res.status(404).json({ error: "Doctor not found" });
+
+    // --- Find or create patient ---
+    let patient = await User.findOne({ email, role: "patient" });
     if (!patient) {
-      // If no patient found, create new one
       patient = new User({
         name,
         email,
         password: await bcrypt.hash("temporaryPassword123", 10),
-        role: "patient"
+        role: "patient",
       });
       await patient.save();
-    } else {
-      // If patient exists, update their name if different
-      if (patient.name !== name) {
-        patient.name = name;
-        await patient.save();
-      }
+    } else if (patient.name !== name) {
+      patient.name = name;
+      await patient.save();
     }
-    
+
+    // --- Create appointment ---
     const appointment = new Appointment({
       name,
       email,
       phone,
       date,
       doctor: doctorId,
-      patient: patient._id
+      patient: patient._id,
+      status: "pending",
     });
-    
+
     await appointment.save();
     await appointment.populate("doctor", "name email specialty");
     await appointment.populate("patient", "name email");
-    
-    res.status(201).json({ message: "Appointment created successfully", appointment });
+
+    // --- Email notifications ---
+    const formattedDate = new Date(date).toLocaleString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      dateStyle: "full",
+      timeStyle: "short",
+    });
+
+    // Email to doctor
+    const doctorEmailBody = `
+      <h2>🩺 New Appointment Booking</h2>
+      <p><strong>Doctor:</strong> ${doctor.name}</p>
+      <p><strong>Patient Name:</strong> ${name}</p>
+      <p><strong>Email:</strong> ${email}</p>
+      <p><strong>Phone:</strong> ${phone}</p>
+      <p><strong>Date & Time:</strong> ${formattedDate}</p>
+      ${notes ? `<p><strong>Notes:</strong> ${notes}</p>` : ""}
+      <br/>
+      <p>Please log in to your portal to view and manage this appointment.</p>
+      <p>– Madhuri Nidan Kendra</p>
+    `;
+
+    // Email to patient
+    const patientEmailBody = `
+      <h2>✅ Appointment Confirmation</h2>
+      <p>Dear ${name},</p>
+      <p>Your appointment has been successfully booked.</p>
+      <ul>
+        <li><strong>Doctor:</strong> ${doctor.name} (${doctor.specialty || "Consultant"})</li>
+        <li><strong>Date & Time:</strong> ${formattedDate}</li>
+        <li><strong>Clinic:</strong> Madhuri Nidan Kendra, Hasanpura</li>
+      </ul>
+      ${notes ? `<p><strong>Your Notes:</strong> ${notes}</p>` : ""}
+      <br/>
+      <p>Thank you for choosing us. Please arrive 10 minutes early for your appointment.</p>
+      <p>– Madhuri Nidan Kendra</p>
+    `;
+
+    // Send both emails
+    await sendEmail(doctor.email, `🩺 New Appointment from ${name}`, doctorEmailBody);
+    await sendEmail(email, `Appointment Confirmation with Dr. ${doctor.name}`, patientEmailBody);
+
+    res.status(201).json({
+      message: "Appointment created successfully. Notifications sent to doctor and patient.",
+      appointment,
+    });
   } catch (err) {
     console.error("Appointment creation error:", err);
     res.status(500).json({ error: err.message });
