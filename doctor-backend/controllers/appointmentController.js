@@ -47,74 +47,56 @@ export const getAppointments = async (req, res) => {
 // controllers/appointmentController.js
 export const createAppointment = async (req, res) => {
   try {
-    const { name, email, phone, date, doctorId, notes } = req.body;
+    const { name, email, phone, date, doctorId } = req.body;
     
+    // Check if doctor exists
     const doctor = await Doctor.findById(doctorId);
-    if (!doctor) return res.status(404).json({ error: "Doctor not found" });
-
-    let patient = await User.findOne({ email, role: "patient" });
+    if (!doctor) {
+      return res.status(404).json({ error: "Doctor not found" });
+    }
+    
+    let patient;
+    
+    // FIRST, try to find existing patient by email (important!)
+    patient = await User.findOne({ email, role: "patient" });
+    
     if (!patient) {
+      // If no patient found, create new one
       patient = new User({
         name,
         email,
         password: await bcrypt.hash("temporaryPassword123", 10),
-        role: "patient",
+        role: "patient"
       });
       await patient.save();
-    } else if (patient.name !== name) {
-      patient.name = name;
-      await patient.save();
+    } else {
+      // If patient exists, update their name if different
+      if (patient.name !== name) {
+        patient.name = name;
+        await patient.save();
+      }
     }
-
+    
     const appointment = new Appointment({
       name,
       email,
       phone,
       date,
       doctor: doctorId,
-      patient: patient._id,
-      status: "pending",
+      patient: patient._id
     });
-
+    
     await appointment.save();
     await appointment.populate("doctor", "name email specialty");
     await appointment.populate("patient", "name email");
-
-    // --- Send email to doctor ---
-    const formattedDate = new Date(date).toLocaleString("en-IN", {
-      timeZone: "Asia/Kolkata",
-      dateStyle: "full",
-      timeStyle: "short",
-    });
-
-    const emailBody = `
-      <h2>New Appointment Booking</h2>
-      <p><strong>Doctor:</strong> ${doctor.name}</p>
-      <p><strong>Patient Name:</strong> ${name}</p>
-      <p><strong>Email:</strong> ${email}</p>
-      <p><strong>Phone:</strong> ${phone}</p>
-      <p><strong>Date & Time:</strong> ${formattedDate}</p>
-      ${notes ? `<p><strong>Notes:</strong> ${notes}</p>` : ""}
-      <br/>
-      <p>Please log in to your portal to view details.</p>
-      <p>– Madhuri Nidan Kendra</p>
-    `;
-
-    await sendEmail(
-      doctor.email,
-      `🩺 New Appointment from ${name}`,
-      emailBody
-    );
-
-    res.status(201).json({
-      message: "Appointment created successfully and doctor notified",
-      appointment,
-    });
+    
+    res.status(201).json({ message: "Appointment created successfully", appointment });
   } catch (err) {
     console.error("Appointment creation error:", err);
     res.status(500).json({ error: err.message });
   }
 };
+
 
 // Cancel appointment by patient
 export const cancelAppointment = async (req, res) => {
