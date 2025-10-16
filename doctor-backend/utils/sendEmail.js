@@ -1,6 +1,5 @@
 // utils/sendEmail.js
 import nodemailer from "nodemailer";
-import "../config/env.js"; // ensure .env loads
 
 export const sendEmail = async (to, subject, html, bccAdmin = true) => {
   try {
@@ -23,20 +22,50 @@ export const sendEmail = async (to, subject, html, bccAdmin = true) => {
       throw new Error("No email recipient specified");
     }
 
-    const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 587,
-      secure: false,
-      auth: { user, pass },
-      tls: {
-        rejectUnauthorized: false
+    // Try different configurations
+    const transporterConfigs = [
+      {
+        // Try SSL first
+        host: "smtp.gmail.com",
+        port: 465,
+        secure: true,
+        auth: { user, pass },
+        connectionTimeout: 30000,
+        socketTimeout: 30000
       },
-      connectionTimeout: 60000,
-    });
+      {
+        // Try TLS
+        host: "smtp.gmail.com",
+        port: 587,
+        secure: false,
+        auth: { user, pass },
+        connectionTimeout: 30000,
+        socketTimeout: 30000
+      }
+    ];
 
-    console.log("🔍 Verifying SMTP connection...");
-    await transporter.verify();
-    console.log("✅ SMTP connection verified");
+    let transporter;
+    let lastError;
+
+    for (const config of transporterConfigs) {
+      try {
+        console.log(`🔧 Trying SMTP config: ${config.host}:${config.port} (secure: ${config.secure})`);
+        transporter = nodemailer.createTransport(config);
+        
+        console.log("🔍 Verifying SMTP connection...");
+        await transporter.verify();
+        console.log(`✅ SMTP connection successful on port ${config.port}`);
+        break; // Success, break the loop
+      } catch (verifyError) {
+        lastError = verifyError;
+        console.log(`❌ Failed on port ${config.port}:`, verifyError.message);
+        continue; // Try next configuration
+      }
+    }
+
+    if (!transporter) {
+      throw new Error(`All SMTP configurations failed. Last error: ${lastError?.message}`);
+    }
 
     const mailOptions = {
       from: `"Madhuri Nidan Kendra" <${user}>`,
@@ -65,13 +94,12 @@ export const sendEmail = async (to, subject, html, bccAdmin = true) => {
       console.error("1. Gmail username/password");
       console.error("2. 2FA is enabled");
       console.error("3. App Password is used (not regular password)");
-    } else if (err.code === "ECONNECTION") {
-      console.error("🌐 Connection failed - Check:");
-      console.error("1. Internet connection");
-      console.error("2. Firewall settings");
-      console.error("3. Port 587 is open");
-    } else if (err.code === "EENVELOPE") {
-      console.error("📨 Envelope error - Check recipient email:", to);
+    } else if (err.code === "ETIMEDOUT" || err.code === "ECONNECTION") {
+      console.error("🌐 Connection failed - Possible solutions:");
+      console.error("1. Try using a different email service (SendGrid, Mailgun)");
+      console.error("2. Check if Render allows outbound SMTP connections");
+      console.error("3. Use Gmail API instead of SMTP");
+      console.error("4. Contact Render support about SMTP restrictions");
     }
     
     return { 
