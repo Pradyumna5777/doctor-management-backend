@@ -77,13 +77,14 @@ export const createAppointment = async (req, res) => {
       doctor: doctorId,
       patient: patient._id,
       status: "pending",
+      notes: notes || "" // Make sure notes are saved
     });
 
     await appointment.save();
     await appointment.populate("doctor", "name email specialty");
     await appointment.populate("patient", "name email");
 
-    // --- Email notifications ---
+    // --- Email notifications with error handling ---
     const formattedDate = new Date(date).toLocaleString("en-IN", {
       timeZone: "Asia/Kolkata",
       dateStyle: "full",
@@ -92,45 +93,138 @@ export const createAppointment = async (req, res) => {
 
     // Email to doctor
     const doctorEmailBody = `
-      <h2>🩺 New Appointment Booking</h2>
-      <p><strong>Doctor:</strong> ${doctor.name}</p>
-      <p><strong>Patient Name:</strong> ${name}</p>
-      <p><strong>Email:</strong> ${email}</p>
-      <p><strong>Phone:</strong> ${phone}</p>
-      <p><strong>Date & Time:</strong> ${formattedDate}</p>
-      ${notes ? `<p><strong>Notes:</strong> ${notes}</p>` : ""}
-      <br/>
-      <p>Please log in to your portal to view and manage this appointment.</p>
-      <p>– Madhuri Nidan Kendra</p>
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #2563eb;">🩺 New Appointment Booking</h2>
+        <div style="background: #f8fafc; padding: 20px; border-radius: 8px;">
+          <p><strong>Doctor:</strong> ${doctor.name}</p>
+          <p><strong>Patient Name:</strong> ${name}</p>
+          <p><strong>Email:</strong> ${email}</p>
+          <p><strong>Phone:</strong> ${phone}</p>
+          <p><strong>Date & Time:</strong> ${formattedDate}</p>
+          ${notes ? `<p><strong>Patient Notes:</strong> ${notes}</p>` : ""}
+        </div>
+        <br/>
+        <p>Please log in to your doctor portal to view and manage this appointment.</p>
+        <p style="color: #64748b;">– Madhuri Nidan Kendra, Hasanpura</p>
+      </div>
     `;
 
     // Email to patient
     const patientEmailBody = `
-      <h2>✅ Appointment Confirmation</h2>
-      <p>Dear ${name},</p>
-      <p>Your appointment has been successfully booked.</p>
-      <ul>
-        <li><strong>Doctor:</strong> ${doctor.name} (${doctor.specialty || "Consultant"})</li>
-        <li><strong>Date & Time:</strong> ${formattedDate}</li>
-        <li><strong>Clinic:</strong> Madhuri Nidan Kendra, Hasanpura</li>
-      </ul>
-      ${notes ? `<p><strong>Your Notes:</strong> ${notes}</p>` : ""}
-      <br/>
-      <p>Thank you for choosing us. Please arrive 10 minutes early for your appointment.</p>
-      <p>– Madhuri Nidan Kendra</p>
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #059669;">✅ Appointment Confirmation</h2>
+        <p>Dear <strong>${name}</strong>,</p>
+        <p>Your appointment has been successfully booked at <strong>Madhuri Nidan Kendra</strong>.</p>
+        
+        <div style="background: #f0fdf4; padding: 20px; border-radius: 8px; border-left: 4px solid #059669;">
+          <h3 style="margin-top: 0;">Appointment Details:</h3>
+          <ul style="list-style: none; padding: 0;">
+            <li>📋 <strong>Doctor:</strong> Dr. ${doctor.name}</li>
+            <li>🎯 <strong>Specialty:</strong> ${doctor.specialty || "General Consultation"}</li>
+            <li>📅 <strong>Date & Time:</strong> ${formattedDate}</li>
+            <li>📍 <strong>Clinic:</strong> Madhuri Nidan Kendra, Hasanpura</li>
+            <li>📞 <strong>Clinic Phone:</strong> +91 9939497429</li>
+          </ul>
+          ${notes ? `<p><strong>Your Notes:</strong> ${notes}</p>` : ""}
+        </div>
+        
+        <div style="background: #fffbeb; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #d97706;">
+          <h4 style="margin-top: 0;">📍 Clinic Address:</h4>
+          <p>Opp. M. H. Nagar Police Station,<br>Hasanpura, Siwan - 841236</p>
+        </div>
+        
+        <p><strong>Please arrive 10-15 minutes early for your appointment.</strong></p>
+        
+        <p style="color: #64748b;">Thank you for choosing Madhuri Nidan Kendra. We look forward to serving you!</p>
+        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;">
+        <p style="color: #94a3b8; font-size: 12px;">This is an automated confirmation. Please do not reply to this email.</p>
+      </div>
     `;
 
-    // Send both emails
-    await sendEmail(doctor.email, `🩺 New Appointment from ${name}`, doctorEmailBody);
-    await sendEmail(email, `Appointment Confirmation with Dr. ${doctor.name}`, patientEmailBody);
+    // Send emails with robust error handling
+    const emailResults = {
+      doctorEmail: { success: false, error: null },
+      patientEmail: { success: false, error: null }
+    };
+
+    try {
+      console.log(`📧 Attempting to send email to doctor: ${doctor.email}`);
+      emailResults.doctorEmail = await sendEmail(
+        doctor.email, 
+        `🩺 New Appointment from ${name}`, 
+        doctorEmailBody
+      );
+    } catch (emailError) {
+      console.error('❌ Failed to send email to doctor:', emailError.message);
+      emailResults.doctorEmail.error = emailError.message;
+    }
+
+    try {
+      console.log(`📧 Attempting to send email to patient: ${email}`);
+      emailResults.patientEmail = await sendEmail(
+        email, 
+        `Appointment Confirmation with Dr. ${doctor.name}`, 
+        patientEmailBody
+      );
+    } catch (emailError) {
+      console.error('❌ Failed to send email to patient:', emailError.message);
+      emailResults.patientEmail.error = emailError.message;
+    }
+
+    // Log email results
+    console.log('📨 Email sending results:', JSON.stringify(emailResults, null, 2));
+
+    // Prepare response message based on email results
+    let emailStatusMessage = "Appointment created successfully. ";
+    
+    if (emailResults.doctorEmail.success && emailResults.patientEmail.success) {
+      emailStatusMessage += "Confirmation emails sent to both doctor and patient.";
+    } else if (emailResults.doctorEmail.success) {
+      emailStatusMessage += "Email sent to doctor, but failed to send patient confirmation.";
+    } else if (emailResults.patientEmail.success) {
+      emailStatusMessage += "Email sent to patient, but failed to send doctor notification.";
+    } else {
+      emailStatusMessage += "Appointment created but email notifications failed. Please contact the clinic directly.";
+    }
 
     res.status(201).json({
-      message: "Appointment created successfully. Notifications sent to doctor and patient.",
-      appointment,
+      message: emailStatusMessage,
+      appointment: {
+        _id: appointment._id,
+        name: appointment.name,
+        email: appointment.email,
+        phone: appointment.phone,
+        date: appointment.date,
+        doctor: appointment.doctor,
+        status: appointment.status,
+        notes: appointment.notes
+      },
+      emailResults: {
+        doctor: emailResults.doctorEmail.success ? 'sent' : 'failed',
+        patient: emailResults.patientEmail.success ? 'sent' : 'failed'
+      }
     });
+
   } catch (err) {
     console.error("Appointment creation error:", err);
-    res.status(500).json({ error: err.message });
+    
+    // More specific error responses
+    if (err.name === 'ValidationError') {
+      return res.status(400).json({ 
+        error: "Validation failed", 
+        details: Object.values(err.errors).map(e => e.message) 
+      });
+    }
+    
+    if (err.code === 11000) {
+      return res.status(400).json({ 
+        error: "Duplicate appointment found" 
+      });
+    }
+    
+    res.status(500).json({ 
+      error: "Failed to create appointment. Please try again or contact the clinic directly." 
+    });
   }
 };
 
