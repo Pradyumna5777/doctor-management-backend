@@ -1,3 +1,7 @@
+// utils/sendEmail.js
+import nodemailer from "nodemailer";
+import "../config/env.js"; // ensure .env loads
+
 export const sendEmail = async (to, subject, html, bccAdmin = true) => {
   try {
     const user = process.env.EMAIL_USER;
